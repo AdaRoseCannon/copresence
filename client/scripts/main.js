@@ -2,5 +2,5 @@
 
 'use strict';
 
-const peer = new Peer({ path: 'peerjs', host: location.hostname, port: Location.port, secure: true });
+const peer = new Peer({ path: 'peerjs', host: location.hostname, secure: true });
 window.peer = peer;
