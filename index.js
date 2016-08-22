@@ -1,11 +1,25 @@
-var express = require('express');
-var app = express();
-var ExpressPeerServer = require('peer').ExpressPeerServer;
+'use strict';
+
+const express = require('express');
+const app = express();
+const expressPeerServer = require('peer').ExpressPeerServer;
 
 app.set('port', (process.env.PORT || 3001));
 
-app.use('/peerjs/', ExpressPeerServer(app, {proxied: true, debug: true}));
+const server = app.listen(app.get('port'), function() {
+	console.log('Node app is running on port', app.get('port'));
+});
 
-app.listen(app.get('port'), function() {
-  console.log('Node app is running on port', app.get('port'));
+const peerServer = expressPeerServer(server, { proxied: true, debug: true });
+
+app.use('/peerjs', peerServer);
+app.use(express.static('client'));
+
+peerServer.on('connection', function(id) {
+	console.log(id);
+	console.log(server._clients);
+});
+
+server.on('disconnect', function(id) {
+		console.log(id + "deconnected");
 });
