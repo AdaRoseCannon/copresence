@@ -12,7 +12,11 @@ const server = app.listen(app.get('port'), function() {
 
 const peerServer = expressPeerServer(server, { proxied: true, debug: true });
 
-app.use('/peerjs', peerServer);
+app.use('/peerjs', function(req, res, next) {
+	res.header("Access-Control-Allow-Origin", "*");
+	res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+	next();
+}, peerServer);
 app.use(express.static('client'));
 
 peerServer.on('connection', function(id) {
