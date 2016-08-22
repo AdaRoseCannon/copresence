@@ -21,5 +21,5 @@ peerServer.on('connection', function(id) {
 });
 
 server.on('disconnect', function(id) {
-		console.log(id + "deconnected");
+	console.log(id + "deconnected");
 });
