@@ -1,0 +1,34 @@
+<html>
+	<head>
+		<script src="https://aframe.io/releases/0.3.0/aframe.min.js"></script>
+	</head>
+	<body>
+		<a-scene>
+			<a-entity id="mouth" visible="false">
+				<a-sphere radius="1" material="shader: standard; color: hsl(130, 90%, 70%); roughness: 0.8; metalness: 0.4;" rotation="-0 0 90" phi-start="90" phi-length="180">
+					<a-circle radius="1" material="color: hsl(130, 90%, 70%);" rotation="0 -90 0">
+						<a-circle radius="0.95" position="0 0 0.001" material="color: hsl(340, 90%, 70%);"></a-circle>
+					</a-circle>
+				</a-sphere>
+				<a-sphere radius="1" material="shader: standard; color: hsl(130, 90%, 70%); roughness: 0.8; metalness: 0.4;" position="0 -0.1 0" rotation="0 0 -90" phi-start="90" phi-length="180">
+					<a-circle radius="1" material="color: hsl(130, 90%, 70%);" rotation="0 -90 0">
+						<a-circle radius="0.95" position="0 0 0.001" material="color: hsl(340, 90%, 70%);"></a-circle>
+					</a-circle>
+				</a-sphere>
+			</a-entity>
+			<a-entity id="eye" visible="false">
+				<a-sphere radius="1" material="shader: standard; color: white; roughness: 0.1; metalness: 0.4; side: back;" >
+					<a-circle radius="0.4" position="0 0 0.5" material="color: black; shader: flat; transparent: true;" rotation="0 0 0"></a-circle>
+					<a-sphere radius="1" scale="0.99 0.99 0.99" material="shader: standard; color: rgba(255,255,255,0); roughness: 0.1; metalness: 0.4; side: front; transparent: true; opacity: 0.5;" ></a-sphere>
+					<a-sphere radius="1" material="shader: standard; color: hsl(130, 90%, 70%); roughness: 0.8; metalness: 0.4;" rotation="-40 0 90" phi-start="90" phi-length="180"></a-sphere>
+				</a-sphere>
+			</a-entity>
+
+			<a-entity clone="#mouth" scale="0.3 0.3 0.3" position="1 1.5 -5">
+				<a-entity clone="#eye" rotation="0 0 20" scale="0.5 0.5 0.5" position="-0.55 1.4"></a-entity>
+				<a-entity clone="#eye" rotation="0 0 -20" scale="0.5 0.5 0.5" position="0.55 1.4"></a-entity>
+			</a-entity>
+			<a-sky color="#ECECEC"></a-sky>
+		</a-scene>
+	</body>
+</html>

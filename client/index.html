@@ -1,48 +1,62 @@
 <html>
-	<head>
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/0.3.14/peer.min.js"></script>
-		<script src="https://aframe.io/releases/0.3.0/aframe.min.js"></script>
-	</head>
-	<body>
-		<script>
-			AFRAME.registerComponent('clone', {
-				schema: {
-					type: 'selector'
-				},
 
-				init: function () {
-					var cloneGeom = this.data.object3D.clone(true);
-					cloneGeom.visible = true;
-					this.el.setObject3D('clone', cloneGeom);
-				}
-			})
-		</script>
-		<a-scene>
-			<a-entity id="mouth" visible="false">
-				<a-sphere radius="1" material="shader: standard; color: hsl(130, 90%, 70%); roughness: 0.8; metalness: 0.4;" rotation="-15 0 90" phi-start="90" phi-length="180">
-					<a-circle radius="1" material="color: hsl(130, 90%, 70%);" rotation="0 -90 0">
-						<a-circle radius="0.95" position="0 0 0.001" material="color: hsl(340, 90%, 70%);"></a-circle>
-					</a-circle>
-				</a-sphere>
-				<a-sphere radius="1" material="shader: standard; color: hsl(130, 90%, 70%); roughness: 0.8; metalness: 0.4;" rotation="15 0 -90" phi-start="90" phi-length="180">
-					<a-circle radius="1" material="color: hsl(130, 90%, 70%);" rotation="0 -90 0">
-						<a-circle radius="0.95" position="0 0 0.001" material="color: hsl(340, 90%, 70%);"></a-circle>
-					</a-circle>
-				</a-sphere>
-			</a-entity>
-			<a-entity id="eye" visible="false">
-				<a-sphere radius="1" material="shader: standard; color: white; roughness: 0.1; metalness: 0.4; side: back;" >
-					<a-sphere radius="1" material="shader: standard; color: hsl(130, 90%, 70%); roughness: 0.8; metalness: 0.4;" rotation="-40 0 90" phi-start="90" phi-length="180"></a-sphere>
-					<a-circle radius="0.4" position="0 0 0.5" material="color: black; shader: flat;" rotation="0 0 0">
-				</a-sphere>
-			</a-entity>
+<head>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/0.3.14/peer.min.js"></script>
+	<script src="https://aframe.io/releases/0.3.0/aframe.min.js"></script>
 
-			<a-entity clone="#mouth" scale="0.3 0.3 0.3" position="1 1.5 -5">
-				<a-entity clone="#eye" rotation="0 0 20" scale="0.5 0.5 0.5" position="-1 1.2 -0.4"></a-entity>
-				<a-entity clone="#eye" rotation="0 0 -20" scale="0.5 0.5 0.5" position="1 1.2 -0.4"></a-entity>
+	<!-- A-FRAME COMPONENTS -->
+	<!-- Bitmap Fonts -->
+	<script src="https://cdn.rawgit.com/bryik/aframe-bmfont-text-component/8f83f135a72f7f230db82f962585f8c85c57f87c/dist/aframe-bmfont-text-component.min.js"></script>
+</head>
+
+<body>
+	<a-scene>
+		<a-assets>
+			<a-mixin id="segment" geometry="primitive: circle; thetaLength: 51.428; thetaStart: -25.71;" material="color: red" sound="autoplay: false; on: click;"></a-mixin>
+			<a-mixin id="segment-label" bmfont-text="text: do; align: center; width: 256;" rotation="0 0 -110" position="0.9 0.5 0.01"></a-mixin>
+			<audio id="c-sound" src="sounds/C.wav" />
+			<audio id="d-sound" src="sounds/D.wav" />
+			<audio id="e-sound" src="sounds/E.wav" />
+			<audio id="f-sound" src="sounds/F.wav" />
+			<audio id="g-sound" src="sounds/G.wav" />
+			<audio id="a-sound" src="sounds/A.wav" />
+			<audio id="b-sound" src="sounds/B.wav" />
+		</a-assets>
+		<a-camera>
+			<a-cursor></a-cursor>
+		</a-camera>
+		<a-entity position="0 1 -5" scale="0.5 0.5 0.5">
+			<a-entity geometry="primitive: box; width: 1.5; height: 4; depth: 0.4;" position="0 0 -0.255" material="color: darkgrey;">
+				<a-entity geometry="primitive: cylinder; height: 0.5; radius: 1.3" rotation="-90 0 0" material="color: grey;"></a-entity>
 			</a-entity>
-			<a-sky color="#ECECEC"></a-sky>
-		</a-scene>
-		<script src="scripts/main.js"></script>
-	</body>
+			<a-entity scale="1.2 1.2 1.2">
+				<a-entity mixin="segment" sound="src: #c-sound;" material="color:red;" rotation="0 0 -51.428">
+					<a-entity mixin="segment-label" bmfont-text="text: do;"></a-entity>
+				</a-entity>
+				<a-entity mixin="segment" sound="src: #d-sound;" material="color:orange;" rotation="0 0 -102.856">
+					<a-entity mixin="segment-label" bmfont-text="text: re;"></a-entity>
+				</a-entity>
+				<a-entity mixin="segment" sound="src: #e-sound;" material="color:yellow;" rotation="0 0 -154.284">
+					<a-entity mixin="segment-label" bmfont-text="text: mi;"></a-entity>
+				</a-entity>
+				<a-entity mixin="segment" sound="src: #f-sound;" material="color:green;" rotation="0 0 -205.712">
+					<a-entity mixin="segment-label" bmfont-text="text: fa;"></a-entity>
+				</a-entity>
+				<a-entity mixin="segment" sound="src: #g-sound;" material="color:cyan" rotation="0 0 -257.14">
+					<a-entity mixin="segment-label" bmfont-text="text: sol;"></a-entity>
+				</a-entity>
+				<a-entity mixin="segment" sound="src: #a-sound;" material="color:blue;" rotation="0 0 -308.568">
+					<a-entity mixin="segment-label" bmfont-text="text: la;"></a-entity>
+				</a-entity>
+				<a-entity mixin="segment" sound="src: #b-sound;" material="color:purple;" rotation="0 0 0">
+					<a-entity mixin="segment-label" bmfont-text="text: si;"></a-entity>
+				</a-entity>
+			</a-entity>
+			<a-entity geometry="primitive: sphere; radius: 0.4;" material="color: red;" scale="1 1 0.3"></a-entity>
+		</a-entity>
+		<a-sky color="#ECECEC"></a-sky>
+	</a-scene>
+	<script src="scripts/main.js"></script>
+</body>
+
 </html>
