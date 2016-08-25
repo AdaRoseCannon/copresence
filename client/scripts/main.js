@@ -2,8 +2,18 @@
 
 'use strict';
 
-var notes = ['do', 're', 'mi', 'fa', 'sol', 'la', 'si'];
-var notesSound = ['sounds/C.wav', 'sounds/D.wav', 'sounds/E.wav', 'sounds/F.wav', 'sounds/G.wav', 'sounds/A.wav', 'sounds/B.wav'];
+var notesMap = {
+	do: 'c',
+	re: 'd',
+	mi: 'e',
+	fa: 'f',
+	sol: 'g',
+	la: 'a',
+	si: 'b'
+};
+var notes = Object.keys(notesMap);
+
+
 function getId() {
 	var tune = [Math.floor(Math.random() * notes.length), Math.floor(Math.random() * notes.length), Math.floor(Math.random() * notes.length)];
 	var tune = [1,2,3];
@@ -35,4 +45,42 @@ navigator.getUserMedia = (navigator.getUserMedia || navigator.webkitGetUserMedia
 
 function ready(id) {
 	console.log(id);
+	document.getElementById('id-label').setAttribute('bmfont-text', 'text: My id: ' + id);
 }
+
+var currentlyDialing = [];
+var dialDisplay = document.getElementById('dial-label')
+function updateDisplay() {
+	dialDisplay.setAttribute('bmfont-text', 'text: ' + currentlyDialing.join('-'));
+}
+
+function playSound(rhyme) {
+	var note = document.querySelector('[data-dial-key="' + rhyme + '"]').components.sound;
+	if (note.sound.isPlaying) {
+		note.stopSound();
+	}
+	setTimeout(function () {
+		if (!note.sound.isPlaying) {
+			note.playSound();
+		}
+	}, 16);
+}
+
+document.getElementById('dial-button').addEventListener('click', function () {
+	var data = currentlyDialing.splice(0);
+	data.forEach(function (n, i) {
+		setTimeout(function() {
+			playSound(n);
+		}, 300 * i + 300);
+	});
+	updateDisplay();
+});
+
+Array.from(document.querySelectorAll('[data-dial-key]'))
+.forEach(function (p) {
+	p.addEventListener('click', function () {
+		currentlyDialing.push(this.dataset.dialKey);
+		updateDisplay();
+		playSound(this.dataset.dialKey);
+	});
+});
