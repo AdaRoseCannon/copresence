@@ -13,37 +13,37 @@ var notesMap = {
 };
 var notes = Object.keys(notesMap);
 
-
 function getId() {
 	var tune = [Math.floor(Math.random() * notes.length), Math.floor(Math.random() * notes.length), Math.floor(Math.random() * notes.length)];
-	var tune = [1,2,3];
 	var id = tune.map(function (n) {return notes[n]}).join('-');
 	return id;
 }
 var id = getId();
 var peer = null;
-navigator.getUserMedia = (navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia);
+var timoutToReconnect = 2000;
 
 (function generatePeer() {
 	peer = new Peer(id, { path: 'peerjs', host: location.hostname, secure: !!location.protocol.match(/^https/), port: location.port || 80 });
-	peer.on('error', function(err) {
+	peer.on('error', function handleErr(err) {
 		switch(err.type) {
 			case 'unavailable-id':
 				id = getId();
-				peer.destroy();
-				generatePeer();
 				break;
-			default:
-				console.log(err.type, err);
-				setTimeout(function () {
-					peer.reconnect();
-				}, 250);
 		}
+		peer.off('error', handleErr);
+		timoutToReconnect *= 2;
+		console.log(err.type, err);
+		console.log('Disconnected reconnecting in ' + (timoutToReconnect / 1000) + ' seconds');
+		peer.destroy();
+		setTimeout(function () {
+			generatePeer();
+		}, timoutToReconnect);
 	});
 	peer.on('open', ready);
 }());
 
 function ready(id) {
+	timoutToReconnect = 2000;
 	console.log(id);
 	document.getElementById('id-label').setAttribute('bmfont-text', 'text: My id: ' + id);
 }
@@ -68,12 +68,23 @@ function playSound(rhyme) {
 
 document.getElementById('dial-button').addEventListener('click', function () {
 	var data = currentlyDialing.splice(0);
-	data.forEach(function (n, i) {
-		setTimeout(function() {
-			playSound(n);
-		}, 300 * i + 300);
+
+	navigator.mediaDevices.getUserMedia({
+		audio: true,
+		video: false
+	})
+	.then(function (mediaStream) {
+		if (!data.length) throw Error('No ID entered');
+		peer.call(data.join('-'), mediaStream);
+	})
+	.then(function () {
+		data.forEach(function (n, i) {
+			setTimeout(function () {
+				playSound(n);
+			}, 300 * i + 300);
+		});
+		updateDisplay();
 	});
-	updateDisplay();
 });
 
 Array.from(document.querySelectorAll('[data-dial-key]'))
