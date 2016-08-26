@@ -1,8 +1,15 @@
 <html>
 
 <head>
+
+	<!-- PeerJS for WebRTC -->
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/0.3.14/peer.min.js"></script>
+
+	<!-- AFrame for VR -->
 	<script src="https://aframe.io/releases/0.3.0/aframe.min.js"></script>
+
+	<!-- Polyfill service to allow es2015 methods -->
+	<script src="https://cdn.polyfill.io/v2/polyfill.js?features=Array.isArray,Array.from,default-3.6,Element.prototype.before,Element.prototype.after,Element.prototype.remove"></script>
 
 	<!-- A-FRAME COMPONENTS -->
 	<!-- Bitmap Fonts -->
@@ -31,7 +38,7 @@
 			<a-cursor></a-cursor>
 		</a-camera>
 		<a-grid src="url(https://cdn.rawgit.com/donmccurdy/aframe-extras/v2.3.0/assets/grid.png)"></a-grid>
-		<a-entity position="0 1 -5" scale="0.5 0.5 0.5">
+		<a-entity position="0 1 -3" scale="0.5 0.5 0.5">
 			<a-entity geometry="primitive: box; width: 1.5; height: 4; depth: 0.4;" position="0 0 -0.255" material="color: darkgrey;">
 				<a-entity geometry="primitive: cylinder; height: 0.5; radius: 1.3" rotation="-90 0 0" material="color: grey;"></a-entity>
 				<a-entity geometry="primitive: box; width: 1.6; height: 0.5; depth: 0.5;" position="0 1.6 0" material="color: teal;">
