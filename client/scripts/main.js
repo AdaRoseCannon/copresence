@@ -2,6 +2,8 @@
 
 'use strict';
 
+var audioCtx = new AudioContext();
+
 var notesMap = {
 	do: 'c',
 	re: 'd',
@@ -29,6 +31,9 @@ var timoutToReconnect = 2000;
 			case 'unavailable-id':
 				id = getId();
 				break;
+			case 'peer-unavailable':
+				console.log(err.message);
+				return;
 		}
 		peer.off('error', handleErr);
 		timoutToReconnect *= 2;
@@ -38,6 +43,27 @@ var timoutToReconnect = 2000;
 		setTimeout(function () {
 			generatePeer();
 		}, timoutToReconnect);
+	});
+	peer.on('call', function receiveCall(mediaConnection) {
+		navigator.mediaDevices.getUserMedia({
+			audio: true,
+			video: false
+		})
+		.then(function (mediaStream) {
+			mediaConnection.answer(mediaStream);
+		});
+		mediaConnection.on('stream', function (stream) {
+			var source = audioCtx.createMediaStreamSource(stream);
+
+			// Create a biquadfilter
+			var biquadFilter = audioCtx.createBiquadFilter();
+			biquadFilter.type = "lowshelf";
+			biquadFilter.frequency.value = 1000;
+			biquadFilter.gain.value = 1;
+
+			source.connect(biquadFilter);
+			biquadFilter.connect(audioCtx.destination);
+		});
 	});
 	peer.on('open', ready);
 }());
@@ -74,6 +100,7 @@ document.getElementById('dial-button').addEventListener('click', function () {
 		video: false
 	})
 	.then(function (mediaStream) {
+
 		if (!data.length) throw Error('No ID entered');
 		peer.call(data.join('-'), mediaStream);
 	})
