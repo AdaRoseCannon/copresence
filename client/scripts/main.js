@@ -23,7 +23,7 @@ var peer = null;
 var timoutToReconnect = 2000;
 
 (function generatePeer() {
-	peer = new Peer(id, { path: 'peerjs', host: location.hostname, secure: !!location.protocol.match(/^https/), port: location.port || 80 });
+	peer = new Peer(id, { path: 'peerjs', host: location.hostname, port: location.port || 80 });
 	peer.on('error', function handleErr(err) {
 		switch(err.type) {
 			case 'unavailable-id':
