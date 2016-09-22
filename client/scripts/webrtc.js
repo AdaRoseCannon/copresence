@@ -237,10 +237,20 @@ var onMessage = _.curry(function onMessage(avatar, event) {
 	avatar.setAttribute('rotation', data[1]);
 }, 2);
 
+var RADTODEG = 180 / Math.PI;
+function radToDeg(n) {
+	return n * RADTODEG;
+}
+
+function numberToPrecision(n) {
+	return n.toFixed(5);
+}
+
 window.sendAvatarData = _.throttle(function coords() {
-	var data = scene.camera.getWorldPosition().toArray().slice(0, 3).join(' ') +
-		';' + scene.camera.getWorldRotation().toArray().slice(0, 3).join(' ');
-	getDataChannels().forEach(function (dataChannel) {
+	var data = scene.camera.getWorldPosition().toArray().slice(0, 3).map(numberToPrecision).join(' ') +
+		';' + scene.camera.parent.rotation.toArray().slice(0, 3).map(radToDeg).map(numberToPrecision).join(' ');
+	var channels = getDataChannels();
+	channels.forEach(function (dataChannel) {
 		dataChannel.send(data);
 	});
 }, 16);
