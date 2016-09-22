@@ -2,17 +2,8 @@
 
 <head>
 
-	<!-- PeerJS for WebRTC -->
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/0.3.14/peer.min.js"></script>
-
 	<!-- AFrame for VR -->
 	<script src="https://aframe.io/releases/0.3.0/aframe.min.js"></script>
-
-	<!-- Polyfill service to allow es2015 methods -->
-	<script src="https://cdn.polyfill.io/v2/polyfill.js?features=Array.isArray,Array.from,default-3.6,Element.prototype.before,Element.prototype.after,Element.prototype.remove"></script>
-
-	<!-- Polyfill for the promise flavoured navigator.mediaDevices.getUserMedia -->
-	<script src="https://cdn.rawgit.com/mozdevs/mediaDevices-getUserMedia-polyfill/master/mediaDevices-getUserMedia-polyfill.js"></script>
 
 	<!-- A-FRAME COMPONENTS -->
 	<!-- Bitmap Fonts -->
@@ -80,6 +71,12 @@
 		</a-entity>
 		<a-sky color="#ECECEC"></a-sky>
 	</a-scene>
+	<script src="https://cdn.polyfill.io/v2/polyfill.js?features=Array.isArray,Array.from,default-3.6,Element.prototype.before,Element.prototype.after,Element.prototype.remove,performance.now"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.16.1/lodash.min.js"></script>
+	<script src="https://cdn.rawgit.com/mozdevs/mediaDevices-getUserMedia-polyfill/master/mediaDevices-getUserMedia-polyfill.js"></script>
+	<script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+	<script src="/socket.io/socket.io.js"></script>
+	<script src="scripts/webrtc.js"></script>
 	<script src="scripts/main.js"></script>
 </body>
 
