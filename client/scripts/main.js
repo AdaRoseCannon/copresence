@@ -65,6 +65,7 @@ var webrtcAvatar = document.getElementById('webrtc-avatar');
 function dial(room) {
 	window.location.hash = room;
 	webrtcAvatar.setAttribute('webrtc-avatar', 'room:' + room);
+	document.getElementById('id-label').setAttribute('bmfont-text', 'text: My room: ' + room);
 }
 
 // Create a random room if not already present in the URL.
@@ -73,4 +74,3 @@ if (!room) {
 	room = randomToken();
 }
 dial(room);
-document.getElementById('id-label').setAttribute('bmfont-text', 'text: My room: ' + room);

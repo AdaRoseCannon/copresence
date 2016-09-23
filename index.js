@@ -54,11 +54,11 @@ io.sockets.on('connection', function (socket) {
 		socket.emit('ready', getFromRoom(room).length);
 	});
 
-	socket.on('bye', function () {
+	socket.on('leaveroom', function () {
 		if (socket.__webRTCRoom) {
 			socket.leave(socket.__webRTCRoom);
+			console.log('leaving room', socket.id, socket.__webRTCRoom);
 		}
-		console.log('received bye');
 	});
 
 });

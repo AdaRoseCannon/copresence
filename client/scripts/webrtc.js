@@ -128,7 +128,7 @@ socket.on('message', function(message, id) {
 				candidate: message.candidate
 			}));
 		} ());
-	} else if (message === 'bye') {
+	} else if (message === 'closeconnection') {
 		(function () {
 			cleanUpPeerConnById(id, true);
 			console.log('disco: ' + id);
@@ -142,7 +142,7 @@ window.addEventListener('unload', function () {
 	});
 
 	// tell server leaving room
-	socket.emit('bye');
+	socket.emit('leaveroom');
 });
 
 /**
@@ -231,7 +231,7 @@ function cleanUpPeerConnById(id, nomessage) {
 	if (!nomessage) {
 
 		// Tell other peers this connection is being closed
-		sendMessage('bye', id);
+		sendMessage('closeconnection', id);
 	}
 	var peerConn = peerConns.get(id);
 	peerConns.delete(id);
@@ -292,6 +292,9 @@ AFRAME.registerComponent('webrtc-avatar', {
 			type: 'string'
 		}
 	},
+	init: function () {
+		this.avatarString = this.el.innerHTML;
+	},
 	update: function () {
 
 		// Clean up before updating
@@ -303,12 +306,11 @@ AFRAME.registerComponent('webrtc-avatar', {
 
 		var room = this.data.room;
 		var target = this.el.parentNode;
-		var avatarString = this.el.innerHTML;
 		this.el.innerHTML = '';
 
 		this.createAvatar = function createAvatar() {
 			var avatar = document.createElement('a-entity');
-			avatar.innerHTML = avatarString;
+			avatar.innerHTML = this.avatarString;
 			target.parentNode.appendChild(avatar);
 			return avatar;
 		}
@@ -332,7 +334,9 @@ AFRAME.registerComponent('webrtc-avatar', {
 	},
 	remove: function () {
 
-		socket.emit('bye');
+		socket.emit('leaveroom');
+
+		if (this.sendAvatarData) this.sendAvatarData.cancel();
 
 		// Close all old connections
 		Array.from(peerConns.keys()).forEach(function (id) {
