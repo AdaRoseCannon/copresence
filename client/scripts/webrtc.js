@@ -204,18 +204,23 @@ function createPeerConnection(config) {
 
 	peerConn.onaddstream = function (e) {
 
-		console.log('audio stream added ', e);
+		console.log('audio stream added ', e.stream);
 
-		var source = audioCtx.createMediaStreamSource(e.stream);
+		// var source = audioCtx.createMediaStreamSource(e.stream);
 
 		// Create a biquadfilter
-		var biquadFilter = audioCtx.createBiquadFilter();
+		// var biquadFilter = audioCtx.createBiquadFilter();
 		// biquadFilter.type = 'lowshelf';
 		// biquadFilter.frequency.value = 1000;
 		// biquadFilter.gain.value = 10;
 
-		source.connect(biquadFilter);
-		biquadFilter.connect(audioCtx.destination);
+		// source.connect(biquadFilter);
+		// biquadFilter.connect(audioCtx.destination);
+
+
+		// audioCtx.createMediaStreamDestination();
+
+		document.querySelector('video').srcObject = e.stream;
 	}
 
 	return audioStreamPromise.then(function (audioStream) {

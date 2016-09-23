@@ -29,7 +29,7 @@ document.getElementById('dial-button').addEventListener('click', function () {
 	})
 	.then(function (mediaStream) {
 
-		if (!data.length) throw Error('No ID entered');
+		if (!data.length) throw Error('No room ID entered');
 		dial(data.join('-'), mediaStream);
 	})
 	.then(function () {
