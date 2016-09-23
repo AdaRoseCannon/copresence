@@ -36,7 +36,6 @@ var configuration = {
 };
 
 var peerConns = new Map();
-var availablePeerConns = [];
 
 // for connection ids
 function genId() {
@@ -92,8 +91,6 @@ socket.on('ready', function (count) {
 
 socket.on('new arrival', function () {
 	console.log('Someone has joined the channel so making a new connection for them and waiting for an offer.');
-	var peerConn = createPeerConnection(configuration);
-	availablePeerConns.push(peerConn);
 });
 
 socket.on('message', function(message, id) {
@@ -102,7 +99,7 @@ socket.on('message', function(message, id) {
 		(function () {
 			console.log('Got offer. Sending answer to peer.');
 
-			var peerConnPromise = availablePeerConns.pop();
+			var peerConnPromise = createPeerConnection(configuration);
 			peerConnPromise.then(function (peerConn) {
 				peerConns.set(id, peerConn);
 
@@ -238,6 +235,7 @@ function cleanUpPeerConnById(id, nomessage) {
 	if (peerConn.__avatar) {
 		peerConn.__avatar.parentNode.removeChild(peerConn.__avatar);
 	}
+	document.querySelector('[webrtc-avatar]').components['webrtc-avatar'].sendAvatarData.cancel();
 	peerConn.close();
 }
 
@@ -258,8 +256,15 @@ function getDataChannels() {
 
 var onMessage = _.curry(function onMessage(avatar, event) {
 	var data = event.data.split(';').map(_.trim);
-	avatar.setAttribute('position', data[0]);
-	avatar.setAttribute('rotation', data[1]);
+	var d
+	d = data.shift();
+	avatar.setAttribute('position', d);
+	d = data.shift();
+	avatar.setAttribute('rotation', d);
+	while ((d = d.shift) !== undefined) {
+		d = d.split(':').map(_.trim);
+		avatar.setAttribute(d[0], d[1]);
+	}
 }, 2);
 
 function onDataChannelCreated(peerConn, channel) {
@@ -300,6 +305,8 @@ AFRAME.registerComponent('webrtc-avatar', {
 		// Clean up before updating
 		this.remove();
 
+		this.dataToSend = [];
+
 		if (document.querySelectorAll('[webrtc-avatar]').length > 1) {
 			throw Error('Only one avatar can be established');
 		}
@@ -318,11 +325,12 @@ AFRAME.registerComponent('webrtc-avatar', {
 		// Join a room
 		socket.emit('create or join', room);
 
-		this.sendAvatarData = _.throttle(function coords() {
+		this.sendAvatarData = _.throttle(function coords(extraData) {
 			var data =
 				target.object3D.getWorldPosition().toArray().slice(0, 3).map(numberToPrecision).join(' ') +
 				';' +
-				target.object3D.rotation.toArray().slice(0, 3).map(radToDeg).map(numberToPrecision).join(' ');
+				target.object3D.rotation.toArray().slice(0, 3).map(radToDeg).map(numberToPrecision).join(' ') +
+				extraData;
 			var channels = getDataChannels();
 			channels.forEach(function (dataChannel) {
 				dataChannel.send(data);
@@ -330,11 +338,12 @@ AFRAME.registerComponent('webrtc-avatar', {
 		}, 16);
 	},
 	tick: function () {
-		this.sendAvatarData();
+		this.sendAvatarData(this.dataToSend.join(';'));
 	},
 	remove: function () {
 
 		socket.emit('leaveroom');
+		this.dataToSend = [];
 
 		if (this.sendAvatarData) this.sendAvatarData.cancel();
 
