@@ -9,6 +9,18 @@
  */
 
 var audioCtx = new AudioContext();
+var audioStreamPromise = navigator.mediaDevices.getUserMedia({
+	audio: true,
+	video: false
+})
+.then(function (stream) {
+	var microphone = audioCtx.createMediaStreamSource(stream);
+	var filter = audioCtx.createBiquadFilter();
+	var peer = audioCtx.createMediaStreamDestination();
+	microphone.connect(filter);
+	filter.connect(peer);
+	return peer.stream;
+});
 
 var configuration = {
 	'iceServers': [{
@@ -59,42 +71,22 @@ socket.on('joined', function(room, clientId) {
 
 socket.on('ready', function (count) {
 	var i;
-	var peerConn;
 
 	// Connect to preexisting clients
 	for (i = 0; i < count - 1; i++) {
 		console.log('Creating an offer');
-		peerConn = createPeerConnection(configuration);
-		peerConn.__peerConnId = genId();
-		peerConns.set(peerConn.__peerConnId, peerConn);
+		createPeerConnection(configuration).then(function (peerConn) {
+			peerConn.__peerConnId = genId();
+			peerConns.set(peerConn.__peerConnId, peerConn);
 
-		var dataChannel = peerConn.createDataChannel('coords', {
-			maxPacketLifeTime: 16,
-			maxRetransmits: 1
+			var dataChannel = peerConn.createDataChannel('coords', {
+				maxPacketLifeTime: 16,
+				maxRetransmits: 1
+			});
+			onDataChannelCreated(peerConn, dataChannel);
+
+			peerConn.createOffer(onLocalSessionCreated(peerConn), logError);
 		});
-		onDataChannelCreated(peerConn, dataChannel);
-
-		// navigator.mediaDevices.getUserMedia({
-		// 	audio: true,
-		// 	video: false
-		// })
-		// .then(function (mediaStream) {
-		// 	mediaConnection.answer(mediaStream);
-		// });
-		// mediaConnection.on('stream', function (stream) {
-		// 	var source = audioCtx.createMediaStreamSource(stream);
-
-		// 	// Create a biquadfilter
-		// 	var biquadFilter = audioCtx.createBiquadFilter();
-		// 	biquadFilter.type = "lowshelf";
-		// 	biquadFilter.frequency.value = 1000;
-		// 	biquadFilter.gain.value = 1;
-
-		// 	source.connect(biquadFilter);
-		// 	biquadFilter.connect(audioCtx.destination);
-		// });
-
-		peerConn.createOffer(onLocalSessionCreated(peerConn), logError);
 	}
 });
 
@@ -110,13 +102,15 @@ socket.on('message', function(message, id) {
 		(function () {
 			console.log('Got offer. Sending answer to peer.');
 
-			var peerConn = availablePeerConns.pop();
-			peerConns.set(id, peerConn);
+			var peerConnPromise = availablePeerConns.pop();
+			peerConnPromise.then(function (peerConn) {
+				peerConns.set(id, peerConn);
 
-			// set the id to the one received from the description
-			peerConn.__peerConnId = id;
-			peerConn.setRemoteDescription(new RTCSessionDescription(message), function () { }, logError);
-			peerConn.createAnswer(onLocalSessionCreated(peerConn), logError);
+				// set the id to the one received from the description
+				peerConn.__peerConnId = id;
+				peerConn.setRemoteDescription(new RTCSessionDescription(message), function () { }, logError);
+				peerConn.createAnswer(onLocalSessionCreated(peerConn), logError);
+			});
 
 		} ());
 	} else if (message.type === 'answer') {
@@ -150,20 +144,6 @@ window.addEventListener('unload', function () {
 	// tell server leaving room
 	socket.emit('bye');
 });
-
-function cleanUpPeerConnById(id, nomessage) {
-	if (!nomessage) {
-
-		// Tell other peers this connection is being closed
-		sendMessage('bye', id);
-	}
-	var peerConn = peerConns.get(id);
-	peerConns.delete(id);
-	if (peerConn.__avatar) {
-		peerConn.__avatar.parentNode.removeChild(peerConn.__avatar);
-	}
-	peerConn.close();
-}
 
 /**
  * Send message to signaling server
@@ -225,7 +205,40 @@ function createPeerConnection(config) {
 		}
 	}
 
-	return peerConn;
+	peerConn.onaddstream = function (e) {
+
+		console.log('audio stream added ', e);
+
+		var source = audioCtx.createMediaStreamSource(e.stream);
+
+		// Create a biquadfilter
+		var biquadFilter = audioCtx.createBiquadFilter();
+		// biquadFilter.type = 'lowshelf';
+		// biquadFilter.frequency.value = 1000;
+		// biquadFilter.gain.value = 10;
+
+		source.connect(biquadFilter);
+		biquadFilter.connect(audioCtx.destination);
+	}
+
+	return audioStreamPromise.then(function (audioStream) {
+		peerConn.addStream(audioStream);
+		return peerConn;
+	});
+}
+
+function cleanUpPeerConnById(id, nomessage) {
+	if (!nomessage) {
+
+		// Tell other peers this connection is being closed
+		sendMessage('bye', id);
+	}
+	var peerConn = peerConns.get(id);
+	peerConns.delete(id);
+	if (peerConn.__avatar) {
+		peerConn.__avatar.parentNode.removeChild(peerConn.__avatar);
+	}
+	peerConn.close();
 }
 
 // Used to send offers and answers

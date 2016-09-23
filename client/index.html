@@ -84,6 +84,11 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.16.1/lodash.min.js"></script>
 	<script src="https://cdn.rawgit.com/mozdevs/mediaDevices-getUserMedia-polyfill/master/mediaDevices-getUserMedia-polyfill.js"></script>
 	<script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+	<script>
+		adapter.browserShim.shimOnTrack();
+		adapter.browserShim.shimMediaStream();
+		adapter.browserShim.shimPeerConnection();
+	</script>
 	<script src="/socket.io/socket.io.js"></script>
 	<script src="scripts/webrtc.js"></script>
 	<script src="scripts/main.js"></script>
