@@ -1,5 +1,5 @@
 'use strict';
-/* global io, _, Map, AFRAME */
+/* global io, _, Map, AFRAME, Promise */
 /* eslint-env browser */
 /* eslint no-var: 0, no-console: 0 */
 
@@ -35,7 +35,7 @@ var configuration = {
 	}]
 };
 
-var peerConns = new Map();
+var peerConnPromises = new Map();
 
 // for connection ids
 function genId() {
@@ -72,39 +72,53 @@ socket.on('ready', function (count) {
 	var i;
 
 	// Connect to preexisting clients
-	for (i = 0; i < count - 1; i++) {
-		console.log('Creating an offer');
-		createPeerConnection(configuration).then(function (peerConn) {
-			peerConn.__peerConnId = genId();
-			peerConns.set(peerConn.__peerConnId, peerConn);
+	function connect(peerConn) {
+		console.log('Creating an offer, id:', peerConn.__peerConnId);
 
-			var dataChannel = peerConn.createDataChannel('coords', {
-				maxPacketLifeTime: 16,
-				maxRetransmits: 1
-			});
-			onDataChannelCreated(peerConn, dataChannel);
-
-			peerConn.createOffer(onLocalSessionCreated(peerConn), logError);
+		var dataChannel = peerConn.createDataChannel('coords', {
+			maxPacketLifeTime: 16,
+			maxRetransmits: 1
 		});
+		dataChannel.__peerConn = peerConn;
+		onDataChannelCreated(peerConn, dataChannel);
+
+		peerConn.createOffer(onLocalSessionCreated(peerConn), logError);
+	}
+
+	for (i = 0; i < count - 1; i++) {
+		createPeerConnection(configuration).then(connect);
 	}
 });
 
 socket.on('new arrival', function () {
-	console.log('Someone has joined the channel so making a new connection for them and waiting for an offer.');
+	console.log('Someone has joined the channel so waiting for an offer.');
 });
 
 socket.on('message', function(message, id) {
 	// console.log('Client received message:', message);
-	if (message.type === 'offer') {
+	if (message.type === 'candidate') {
 		(function () {
-			console.log('Got offer. Sending answer to peer.');
 
-			var peerConnPromise = createPeerConnection(configuration);
-			peerConnPromise.then(function (peerConn) {
-				peerConns.set(id, peerConn);
+			var promise = peerConnPromises.get(id);
+			if (!promise) {
+				console.log('I don\'t have a connection with id', id);
+				return;
+			}
+			promise.then(function (peerConn) {
+				peerConn.addIceCandidate(new RTCIceCandidate({
+					candidate: message.candidate
+				}));
+			});
+		} ());
+	} else if (message.type === 'offer') {
+		(function () {
 
-				// set the id to the one received from the description
-				peerConn.__peerConnId = id;
+			Promise.resolve(peerConnPromises.get(id))
+			.then(function (pc) {
+				return pc || createPeerConnection(configuration, id);
+			})
+			.then(function (peerConn) {
+				console.log('Got offer. Sending answer to peer, id: ', id);
 				peerConn.setRemoteDescription(new RTCSessionDescription(message), function () { }, logError);
 				peerConn.createAnswer(onLocalSessionCreated(peerConn), logError);
 			});
@@ -112,17 +126,17 @@ socket.on('message', function(message, id) {
 		} ());
 	} else if (message.type === 'answer') {
 		(function () {
-			var peerConn = peerConn = peerConns.get(id);
-			console.log('Got answer.');
-			peerConn.setRemoteDescription(new RTCSessionDescription(message), function () {
-				console.log('Connected');
-			}, logError);
-		} ());
-	} else if (message.type === 'candidate') {
-		(function () {
-			var peerConn = peerConn = peerConns.get(id);
-			peerConn.addIceCandidate(new RTCIceCandidate({
-				candidate: message.candidate
+			var promise = peerConnPromises.get(id);
+			if (!promise) {
+				console.log('I don\'t have a connection with id', id);
+				return;
+			}
+			peerConnPromises.set(id, promise.then(function (peerConn) {
+				console.log('Got answer.');
+				peerConn.setRemoteDescription(new RTCSessionDescription(message), function () {
+					console.log('Connected');
+				}, logError);
+				return peerConn;
 			}));
 		} ());
 	} else if (message === 'closeconnection') {
@@ -134,7 +148,7 @@ socket.on('message', function(message, id) {
 });
 
 window.addEventListener('unload', function () {
-	Array.from(peerConns.keys()).forEach(function (id) {
+	Array.from(peerConnPromises.keys()).forEach(function (id) {
 		cleanUpPeerConnById(id);
 	});
 
@@ -157,8 +171,12 @@ function sendMessage(message, id) {
 /**
  * Need to rejig so it works with many peers
  */
-function createPeerConnection(config) {
+function createPeerConnection(config, id) {
+	console.log('Creating new PEER connection');
+
 	var peerConn = new RTCPeerConnection(config);
+
+	peerConn.__peerConnId = id || genId();
 
 	// send any ice candidates to the other peer
 	peerConn.onicecandidate = function(event) {
@@ -223,10 +241,13 @@ function createPeerConnection(config) {
 		document.querySelector('video').srcObject = e.stream;
 	}
 
-	return audioStreamPromise.then(function (audioStream) {
+	var promise = audioStreamPromise.then(function (audioStream) {
 		peerConn.addStream(audioStream);
 		return peerConn;
 	});
+
+	peerConnPromises.set(peerConn.__peerConnId, promise);
+	return promise;
 }
 
 function cleanUpPeerConnById(id, nomessage) {
@@ -235,28 +256,34 @@ function cleanUpPeerConnById(id, nomessage) {
 		// Tell other peers this connection is being closed
 		sendMessage('closeconnection', id);
 	}
-	var peerConn = peerConns.get(id);
-	peerConns.delete(id);
-	if (peerConn.__avatar) {
-		peerConn.__avatar.parentNode.removeChild(peerConn.__avatar);
-	}
-	document.querySelector('[webrtc-avatar]').components['webrtc-avatar'].sendAvatarData.cancel();
-	peerConn.close();
+	var promise = peerConnPromises.get(id);
+	if (!promise) return;
+	peerConnPromises.set(id, promise.then(function (peerConn) {
+		peerConnPromises.delete(id);
+		if (peerConn.__avatar) {
+			peerConn.__avatar.parentNode.removeChild(peerConn.__avatar);
+		}
+		document.querySelector('[webrtc-avatar]').components['webrtc-avatar'].sendAvatarData.cancel();
+		peerConn.close();
+	}));
 }
 
 // Used to send offers and answers
 var onLocalSessionCreated = _.curry(function onLocalSessionCreated(peerConn, desc) {
-	// console.log('local session created:', desc);
+	console.log('local session created:', desc);
 	peerConn.setLocalDescription(desc, function () {
-		// console.log('sending local desc:', peerConn.localDescription);
+		console.log('sending local desc:', peerConn.localDescription);
 		sendMessage(peerConn.localDescription, peerConn.__peerConnId);
 	}, logError);
 }, 2);
 
 function getDataChannels() {
-	return _.compact(Array.from(peerConns.values()).map(function (peerConn) {
-		return peerConn.__dataChannel;
-	}));
+	return Promise.all(Array.from(peerConnPromises.values()))
+	.then(function (arr) {
+		return _.compact(arr.map(function (peerConn) {
+			return peerConn.__dataChannel;
+		}));
+	});
 }
 
 var onMessage = _.curry(function onMessage(avatar, event) {
@@ -278,6 +305,7 @@ function onDataChannelCreated(peerConn, channel) {
 	channel.onopen = function() {
 		console.log('CHANNEL opened!!!');
 		peerConn.__dataChannel = channel;
+		channel.__peerConn = peerConn;
 		var el = document.querySelector('[webrtc-avatar]');
 		if (el) {
 			var avatar = el.components['webrtc-avatar'].createAvatar();
@@ -336,9 +364,11 @@ AFRAME.registerComponent('webrtc-avatar', {
 				';' +
 				target.object3D.rotation.toArray().slice(0, 3).map(radToDeg).map(numberToPrecision).join(' ') +
 				extraData;
-			var channels = getDataChannels();
-			channels.forEach(function (dataChannel) {
-				dataChannel.send(data);
+			getDataChannels().then(function (channels) {
+				channels.forEach(function (dataChannel) {
+					if (dataChannel.__peerConn.connectionState !== 'connected' && dataChannel.__peerConn.connectionState !== undefined) return;
+					dataChannel.send(data);
+				});
 			});
 		}, 16);
 	},
@@ -353,7 +383,7 @@ AFRAME.registerComponent('webrtc-avatar', {
 		if (this.sendAvatarData) this.sendAvatarData.cancel();
 
 		// Close all old connections
-		Array.from(peerConns.keys()).forEach(function (id) {
+		Array.from(peerConnPromises.keys()).forEach(function (id) {
 			cleanUpPeerConnById(id);
 		});
 
