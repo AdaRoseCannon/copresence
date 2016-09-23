@@ -1,26 +1,14 @@
 'use strict';
-/* global io, _, Map */
+/* global io, _, Map, AFRAME */
 /* eslint-env browser */
 /* eslint no-var: 0, no-console: 0 */
 
-/****************************************************************************
- * Initial setup
- ****************************************************************************/
 
+/**
+ * CONSTANTS AND UTILITY FUNCTIONS
+ */
 
 var audioCtx = new AudioContext();
-var scene = document.querySelector('a-scene');
-
-var notesMap = {
-	do: 'c',
-	re: 'd',
-	mi: 'e',
-	fa: 'f',
-	sol: 'g',
-	la: 'a',
-	si: 'b'
-};
-var notes = Object.keys(notesMap);
 
 var configuration = {
 	'iceServers': [{
@@ -45,19 +33,18 @@ function genId() {
 	).toString(36);
 }
 
-// for room names
-function randomToken() {
-	var tune = [Math.floor(Math.random() * notes.length), Math.floor(Math.random() * notes.length), Math.floor(Math.random() * notes.length)];
-	var id = tune.map(function (n) {return notes[n]}).join('-');
-	return id;
+var RADTODEG = 180 / Math.PI;
+function radToDeg(n) {
+	return n * RADTODEG;
 }
 
-// Create a random room if not already present in the URL.
-var room = window.location.hash.substring(1);
-if (!room) {
-	room = window.location.hash = randomToken();
+function numberToPrecision(n) {
+	return n.toFixed(5);
 }
-document.getElementById('id-label').setAttribute('bmfont-text', 'text: My room: ' + room);
+
+function logError(err) {
+	console.log(err.toString(), err);
+}
 
 /****************************************************************************
  * Signaling server
@@ -148,13 +135,35 @@ socket.on('message', function(message, id) {
 			}));
 		} ());
 	} else if (message === 'bye') {
-		// TODO: cleanup RTC connection?
-		console.log('disco');
+		(function () {
+			cleanUpPeerConnById(id, true);
+			console.log('disco: ' + id);
+		} ());
 	}
 });
 
-// Join a room
-socket.emit('create or join', room);
+window.addEventListener('unload', function () {
+	Array.from(peerConns.keys()).forEach(function (id) {
+		cleanUpPeerConnById(id);
+	});
+
+	// tell server leaving room
+	socket.emit('bye');
+});
+
+function cleanUpPeerConnById(id, nomessage) {
+	if (!nomessage) {
+
+		// Tell other peers this connection is being closed
+		sendMessage('bye', id);
+	}
+	var peerConn = peerConns.get(id);
+	peerConns.delete(id);
+	if (peerConn.__avatar) {
+		peerConn.__avatar.remove();
+	}
+	peerConn.close();
+}
 
 /**
  * Send message to signaling server
@@ -212,12 +221,11 @@ function getDataChannels() {
 	}));
 }
 
-function createAvatar() {
-	var avatar = document.createElement('a-entity');
-	avatar.innerHTML = '<a-box></a-box>';
-	scene.appendChild(avatar);
-	return avatar;
-}
+var onMessage = _.curry(function onMessage(avatar, event) {
+	var data = event.data.split(';').map(_.trim);
+	avatar.setAttribute('position', data[0]);
+	avatar.setAttribute('rotation', data[1]);
+}, 2);
 
 function onDataChannelCreated(peerConn, channel) {
 	console.log('onDataChannelCreated:', channel);
@@ -225,36 +233,76 @@ function onDataChannelCreated(peerConn, channel) {
 	channel.onopen = function() {
 		console.log('CHANNEL opened!!!');
 		peerConn.__dataChannel = channel;
-
-		var avatar = createAvatar();
-		channel.onmessage = onMessage(avatar);
+		var el = document.querySelector('[webrtc-avatar]');
+		if (el) {
+			var avatar = el.components['webrtc-avatar'].createAvatar();
+			peerConn.__avatar = avatar;
+			channel.onmessage = onMessage(avatar);
+		}
 	};
 }
 
-var onMessage = _.curry(function onMessage(avatar, event) {
-	var data = event.data.split(';').map(_.trim);
-	avatar.setAttribute('position', data[0]);
-	avatar.setAttribute('rotation', data[1]);
-}, 2);
+/**
+ * REGISTERRING THE COMPONENT
+ *
+ * web-rtc avatar sits on what you want to track
+ *
+ * with the room is the room it is part of
+ *
+ * */
 
-var RADTODEG = 180 / Math.PI;
-function radToDeg(n) {
-	return n * RADTODEG;
-}
+AFRAME.registerComponent('webrtc-avatar', {
+	schema:{
+		room: {
+			type: 'string'
+		}
+	},
+	update: function () {
 
-function numberToPrecision(n) {
-	return n.toFixed(5);
-}
+		// Clean up before updating
+		this.remove();
 
-window.sendAvatarData = _.throttle(function coords() {
-	var data = scene.camera.getWorldPosition().toArray().slice(0, 3).map(numberToPrecision).join(' ') +
-		';' + scene.camera.parent.rotation.toArray().slice(0, 3).map(radToDeg).map(numberToPrecision).join(' ');
-	var channels = getDataChannels();
-	channels.forEach(function (dataChannel) {
-		dataChannel.send(data);
-	});
-}, 16);
+		if (document.querySelectorAll('[webrtc-avatar]').length > 1) {
+			throw Error('Only one avatar can be established');
+		}
 
-function logError(err) {
-	console.log(err.toString(), err);
-}
+		var room = this.data.room;
+		var target = this.el.parentNode;
+		var avatarString = this.el.innerHTML;
+		this.el.innerHTML = '';
+
+		this.createAvatar = function createAvatar() {
+			var avatar = document.createElement('a-entity');
+			avatar.innerHTML = avatarString;
+			target.parentNode.appendChild(avatar);
+			return avatar;
+		}
+
+		// Join a room
+		socket.emit('create or join', room);
+
+		this.sendAvatarData = _.throttle(function coords() {
+			var data =
+				target.object3D.getWorldPosition().toArray().slice(0, 3).map(numberToPrecision).join(' ') +
+				';' +
+				target.object3D.rotation.toArray().slice(0, 3).map(radToDeg).map(numberToPrecision).join(' ');
+			var channels = getDataChannels();
+			channels.forEach(function (dataChannel) {
+				dataChannel.send(data);
+			});
+		}, 16);
+	},
+	tick: function () {
+		this.sendAvatarData();
+	},
+	remove: function () {
+
+		socket.emit('bye');
+
+		// Close all old connections
+		Array.from(peerConns.keys()).forEach(function (id) {
+			cleanUpPeerConnById(id);
+		});
+
+	}
+});

@@ -55,15 +55,17 @@ io.sockets.on('connection', function (socket) {
 	});
 
 	socket.on('bye', function () {
-		socket.leave(socket.__webRTCRoom);
-		console.console.log('received bye');
+		if (socket.__webRTCRoom) {
+			socket.leave(socket.__webRTCRoom);
+		}
+		console.log('received bye');
 	});
 
 });
 
 app.use(function(req, res, next) {
-	res.header("Access-Control-Allow-Origin", "*");
-	res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+	res.header('Access-Control-Allow-Origin', '*');
+	res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
 	next();
 });
 

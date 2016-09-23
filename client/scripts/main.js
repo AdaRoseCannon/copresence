@@ -1,5 +1,4 @@
 /* eslint no-var: 0, no-console: 0 */
-/* global AFRAME */
 
 'use strict';
 
@@ -31,7 +30,7 @@ document.getElementById('dial-button').addEventListener('click', function () {
 	.then(function (mediaStream) {
 
 		if (!data.length) throw Error('No ID entered');
-		window.dial(data.join('-'), mediaStream);
+		dial(data.join('-'), mediaStream);
 	})
 	.then(function () {
 		data.forEach(function (n, i) {
@@ -52,6 +51,26 @@ Array.from(document.querySelectorAll('[data-dial-key]'))
 	});
 });
 
-AFRAME.registerSystem('senddata', {schema:{}, tick: function() {
-	window.sendAvatarData();
-}});
+
+// for room names
+function randomToken() {
+	var tune = [Math.floor(Math.random() * notes.length), Math.floor(Math.random() * notes.length), Math.floor(Math.random() * notes.length)];
+	var id = tune.map(function (n) {return notes[n]}).join('-');
+	return id;
+}
+
+var notes = ['do', 're', 'mi', 'fa', 'sol', 'la', 'si'];
+
+var webrtcAvatar = document.getElementById('webrtc-avatar');
+function dial(room) {
+	window.location.hash = room;
+	webrtcAvatar.setAttribute('webrtc-avatar', 'room:' + room);
+}
+
+// Create a random room if not already present in the URL.
+var room = window.location.hash.substring(1);
+if (!room) {
+	room = randomToken();
+}
+dial(room);
+document.getElementById('id-label').setAttribute('bmfont-text', 'text: My room: ' + room);
