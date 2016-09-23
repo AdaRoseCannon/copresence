@@ -160,7 +160,7 @@ function cleanUpPeerConnById(id, nomessage) {
 	var peerConn = peerConns.get(id);
 	peerConns.delete(id);
 	if (peerConn.__avatar) {
-		peerConn.__avatar.remove();
+		peerConn.__avatar.parentNode.removeChild(peerConn.__avatar);
 	}
 	peerConn.close();
 }
@@ -202,6 +202,28 @@ function createPeerConnection(config) {
 		// console.log('ondatachannel:', event.channel);
 		onDataChannelCreated(peerConn, event.channel);
 	};
+
+	peerConn.onconnectionstatechange = function() {
+		switch(peerConn.connectionState) {
+			case 'connected':
+				console.log('connected');
+			break;
+			case 'disconnected':
+			case 'failed':
+				console.log('TODO: RECONNECT');
+				if (peerConn.__peerConnId) {
+					cleanUpPeerConnById(peerConn.__peerConnId);
+				}
+			// One or more transports has terminated unexpectedly or in an error
+			break;
+			case 'closed':
+				if (peerConn.__peerConnId) {
+					console.log('Connection closed ' + peerConn.__peerConnId);
+					cleanUpPeerConnById(peerConn.__peerConnId);
+				}
+			break;
+		}
+	}
 
 	return peerConn;
 }
