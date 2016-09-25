@@ -68,9 +68,33 @@ function dial(room) {
 	document.getElementById('id-label').setAttribute('bmfont-text', 'text: My room: ' + room);
 }
 
+var scene = document.querySelector('a-scene');
+if (scene.hasLoaded) {
+  run();
+} else {
+  scene.addEventListener('loaded', run);
+}
+function run () {
+	var cam = document.querySelector('a-camera');
+	var pos = cam.getAttribute('position');
+	cam.setAttribute('position', (6 * Math.random() - 3 + pos.x) + ' ' + pos.y + ' ' + pos.z);
+}
+
 // Create a random room if not already present in the URL.
 var room = window.location.hash.substring(1);
 if (!room) {
 	room = randomToken();
 }
 dial(room);
+
+(function () {
+
+	if ('serviceWorker' in navigator) {
+		navigator.serviceWorker.register('/sw.js', { scope: '/' })
+		.then(function (reg) {
+			console.log('sw registered', reg);
+		}).catch(function (error) {
+			console.log('sw registration failed with ' + error);
+		});
+	}
+}())

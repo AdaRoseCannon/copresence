@@ -1,5 +1,5 @@
 'use strict';
-/* global io, _, Map, AFRAME, Promise */
+/* global io, _, Map, AFRAME, Promise, Uint8Array */
 /* eslint-env browser */
 /* eslint no-var: 0, no-console: 0 */
 
@@ -223,22 +223,37 @@ function createPeerConnection(config, id) {
 	peerConn.onaddstream = function (e) {
 
 		console.log('audio stream added ', e.stream);
+		// var video = document.createElement('video');
+		// video.autoplay = 'true';
+		// video.objectSrc = e.stream;
+		// video.style.position = 'absolute';
+		// video.style.visibility = 'hidden';
+		// peerConn.__video = video;
+		// document.body.appendChild(video);
 
-		// var source = audioCtx.createMediaStreamSource(e.stream);
+		peerConn.__audioCtx = new AudioContext();
+		peerConn.__source = peerConn.__audioCtx.createMediaStreamSource(e.stream);
 
-		// Create a biquadfilter
-		// var biquadFilter = audioCtx.createBiquadFilter();
-		// biquadFilter.type = 'lowshelf';
-		// biquadFilter.frequency.value = 1000;
-		// biquadFilter.gain.value = 10;
+		peerConn.__stream = e.stream;
 
-		// source.connect(biquadFilter);
-		// biquadFilter.connect(audioCtx.destination);
+		peerConn.__analyser = peerConn.__audioCtx.createAnalyser();
+		peerConn.__analyser.minDecibels = -140;
+		peerConn.__analyser.maxDecibels = 0;
 
+		peerConn.__analyser.smoothingTimeConstant = 0.8;
+		peerConn.__analyser.fftSize = 32;
+		var freqs = new Uint8Array(peerConn.__analyser.frequencyBinCount);
+		var times = new Uint8Array(peerConn.__analyser.frequencyBinCount);
 
-		// audioCtx.createMediaStreamDestination();
+		peerConn.__source.connect(peerConn.__analyser);
+		peerConn.__analyser.connect(peerConn.__audioCtx.destination);
 
-		document.querySelector('video').srcObject = e.stream;
+		setInterval(function () {
+			peerConn.__analyser.getByteFrequencyData(freqs);
+			peerConn.__analyser.getByteTimeDomainData(times);
+			console.log(freqs.join(' '));
+		}, 100);
+
 	}
 
 	var promise = audioStreamPromise.then(function (audioStream) {
@@ -261,7 +276,11 @@ function cleanUpPeerConnById(id, nomessage) {
 	peerConnPromises.set(id, promise.then(function (peerConn) {
 		peerConnPromises.delete(id);
 		if (peerConn.__avatar) {
-			peerConn.__avatar.parentNode.removeChild(peerConn.__avatar);
+			delete peerConn.___avatar;
+			peerConn.__avatar.emit('remove');
+			setTimeout(function () {
+				peerConn.__avatar.parentNode.removeChild(peerConn.__avatar);
+			}, 1800);
 		}
 		document.querySelector('[webrtc-avatar]').components['webrtc-avatar'].sendAvatarData.cancel();
 		peerConn.close();
@@ -350,8 +369,10 @@ AFRAME.registerComponent('webrtc-avatar', {
 
 		this.createAvatar = function createAvatar() {
 			var avatar = document.createElement('a-entity');
-			avatar.innerHTML = this.avatarString;
+			avatar.innerHTML = this.avatarString.replace(/aquamarine/ig, 'hsl(' + Math.random() * 360 + ',80%,60%)');
 			target.parentNode.appendChild(avatar);
+			this.el.emit('avatar-created', avatar);
+			this.tick();
 			return avatar;
 		}
 
@@ -366,7 +387,14 @@ AFRAME.registerComponent('webrtc-avatar', {
 				extraData;
 			getDataChannels().then(function (channels) {
 				channels.forEach(function (dataChannel) {
-					if (dataChannel.__peerConn.connectionState !== 'connected' && dataChannel.__peerConn.connectionState !== undefined) return;
+					if (
+						dataChannel.readyState !== 'open'
+					) {
+						if (dataChannel.readyState === 'closed') {
+							return cleanUpPeerConnById(dataChannel.__peerConn.__peerConnId);
+						}
+						return;
+					}
 					dataChannel.send(data);
 				});
 			});
