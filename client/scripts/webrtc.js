@@ -276,10 +276,11 @@ function cleanUpPeerConnById(id, nomessage) {
 	peerConnPromises.set(id, promise.then(function (peerConn) {
 		peerConnPromises.delete(id);
 		if (peerConn.__avatar) {
-			delete peerConn.___avatar;
 			peerConn.__avatar.emit('remove');
+			var avatar = peerConn.__avatar;
+			delete peerConn.__avatar;
 			setTimeout(function () {
-				peerConn.__avatar.parentNode.removeChild(peerConn.__avatar);
+				avatar.parentNode.removeChild(avatar);
 			}, 1800);
 		}
 		document.querySelector('[webrtc-avatar]').components['webrtc-avatar'].sendAvatarData.cancel();
@@ -312,9 +313,8 @@ var onMessage = _.curry(function onMessage(avatar, event) {
 	avatar.setAttribute('position', d);
 	d = data.shift();
 	avatar.setAttribute('rotation', d);
-	while ((d = d.shift) !== undefined) {
-		d = d.split(':').map(_.trim);
-		avatar.setAttribute(d[0], d[1]);
+	while ((d = data.shift()) !== undefined) {
+		avatar.emit('avatarmessage', d.trim());
 	}
 }, 2);
 
@@ -326,7 +326,7 @@ function onDataChannelCreated(peerConn, channel) {
 		peerConn.__dataChannel = channel;
 		channel.__peerConn = peerConn;
 		var el = document.querySelector('[webrtc-avatar]');
-		if (el) {
+		if (el && !peerConn.__avatar) {
 			var avatar = el.components['webrtc-avatar'].createAvatar();
 			peerConn.__avatar = avatar;
 			channel.onmessage = onMessage(avatar);
@@ -367,9 +367,13 @@ AFRAME.registerComponent('webrtc-avatar', {
 		var target = this.el.parentNode;
 		this.el.innerHTML = '';
 
+		this.el.addEventListener('sendstringmessage', function (e) {
+			this.dataToSend.push(e.detail);
+		}.bind(this));
+
 		this.createAvatar = function createAvatar() {
 			var avatar = document.createElement('a-entity');
-			avatar.innerHTML = this.avatarString.replace(/aquamarine/ig, 'hsl(' + Math.random() * 360 + ',80%,60%)');
+			avatar.innerHTML = this.avatarString;
 			target.parentNode.appendChild(avatar);
 			this.el.emit('avatar-created', avatar);
 			this.tick();
@@ -384,6 +388,7 @@ AFRAME.registerComponent('webrtc-avatar', {
 				target.object3D.getWorldPosition().toArray().slice(0, 3).map(numberToPrecision).join(' ') +
 				';' +
 				target.object3D.rotation.toArray().slice(0, 3).map(radToDeg).map(numberToPrecision).join(' ') +
+				';' +
 				extraData;
 			getDataChannels().then(function (channels) {
 				channels.forEach(function (dataChannel) {
@@ -401,7 +406,7 @@ AFRAME.registerComponent('webrtc-avatar', {
 		}, 16);
 	},
 	tick: function () {
-		this.sendAvatarData(this.dataToSend.join(';'));
+		this.sendAvatarData(this.dataToSend.splice(0).join(';'));
 	},
 	remove: function () {
 

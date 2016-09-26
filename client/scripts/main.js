@@ -68,6 +68,22 @@ function dial(room) {
 	document.getElementById('id-label').setAttribute('bmfont-text', 'text: My room: ' + room);
 }
 
+webrtcAvatar.addEventListener('avatar-created', function (e) {
+	var avatar = e.detail;
+	var col = 'color: hsl(' + Math.random() * 360 + ',80%,60%);';
+	avatar.querySelectorAll('.recolor').forEach(function (el) {
+		if (el.matches('.avatar-boom')) {
+			el.setAttribute('material', col + 'side: double; transparent: true; opacity: 0.5;');
+		} else {
+			el.setAttribute('material', col);
+		}
+	});
+	webrtcAvatar.emit('sendstringmessage', 'colorme: ' + 'blue');
+	avatar.addEventListener('avatarmessage', function (e) {
+		console.log('Message from avatar: ' + e.detail);
+	});
+});
+
 var scene = document.querySelector('a-scene');
 if (scene.hasLoaded) {
   run();
