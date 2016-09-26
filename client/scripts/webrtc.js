@@ -313,7 +313,7 @@ var onMessage = _.curry(function onMessage(avatar, event) {
 	avatar.setAttribute('position', d);
 	d = data.shift();
 	avatar.setAttribute('rotation', d);
-	while ((d = data.shift()) !== undefined) {
+	while (d = data.shift()) {
 		avatar.emit('avatarmessage', d.trim());
 	}
 }, 2);
