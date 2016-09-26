@@ -132,9 +132,9 @@ socket.on('message', function(message, id) {
 				return;
 			}
 			peerConnPromises.set(id, promise.then(function (peerConn) {
-				console.log('Got answer.');
+				console.log('Got answer. ' + id);
 				peerConn.setRemoteDescription(new RTCSessionDescription(message), function () {
-					console.log('Connected');
+					console.log('Connected ' + id);
 				}, logError);
 				return peerConn;
 			}));
