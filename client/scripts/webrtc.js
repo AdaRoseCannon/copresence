@@ -15,10 +15,25 @@ var audioStreamPromise = navigator.mediaDevices.getUserMedia({
 })
 .then(function (stream) {
 	var microphone = audioCtx.createMediaStreamSource(stream);
+
+	// Create a filter for voices
 	var filter = audioCtx.createBiquadFilter();
+	filter.type = 'bandpass';
+	filter.frequency.value = 170;
+	filter.Q.value = 0.1;
+
 	var peer = audioCtx.createMediaStreamDestination();
+
+	// Connect the microphone input to the stream
 	microphone.connect(filter);
 	filter.connect(peer);
+
+	// Make sure the stream is read.
+	var gain = audioCtx.createGain();
+	gain.gain.value = 0.00001;
+	filter.connect(gain);
+	gain.connect(audioCtx.destination);
+
 	return peer.stream;
 });
 
@@ -82,9 +97,12 @@ socket.on('ready', function (count) {
 		dataChannel.__peerConn = peerConn;
 		onDataChannelCreated(peerConn, dataChannel);
 
+		peerConn.addStream(peerConn.__localStream);
+
 		peerConn.createOffer(onLocalSessionCreated(peerConn), logError);
 	}
 
+	// Create sockets for the number of people in the same room
 	for (i = 0; i < count - 1; i++) {
 		createPeerConnection(configuration).then(connect);
 	}
@@ -119,8 +137,13 @@ socket.on('message', function(message, id) {
 			})
 			.then(function (peerConn) {
 				console.log('Got offer. Sending answer to peer, id: ', id);
-				peerConn.setRemoteDescription(new RTCSessionDescription(message), function () { }, logError);
-				peerConn.createAnswer(onLocalSessionCreated(peerConn), logError);
+				peerConn.addStream(peerConn.__localStream);
+				peerConn.setRemoteDescription(new RTCSessionDescription(message), function () {
+
+					// Creating answer
+					peerConn.createAnswer(onLocalSessionCreated(peerConn), logError);
+				}, logError);
+
 			});
 
 		} ());
@@ -172,96 +195,100 @@ function sendMessage(message, id) {
  * Need to rejig so it works with many peers
  */
 function createPeerConnection(config, id) {
-	console.log('Creating new PEER connection');
 
-	var peerConn = new RTCPeerConnection(config);
-
-	peerConn.__peerConnId = id || genId();
-
-	// send any ice candidates to the other peer
-	peerConn.onicecandidate = function(event) {
-		// console.log('icecandidate event:', event);
-		if (event.candidate) {
-			sendMessage({
-				type: 'candidate',
-				label: event.candidate.sdpMLineIndex,
-				id: event.candidate.sdpMid,
-				candidate: event.candidate.candidate
-			}, peerConn.__peerConnId);
-		} else {
-			// console.log('End of candidates.');
-		}
-	};
-
-	peerConn.ondatachannel = function (event) {
-		// console.log('ondatachannel:', event.channel);
-		onDataChannelCreated(peerConn, event.channel);
-	};
-
-	peerConn.onconnectionstatechange = function() {
-		switch(peerConn.connectionState) {
-			case 'connected':
-				console.log('connected');
-			break;
-			case 'disconnected':
-			case 'failed':
-				console.log('TODO: RECONNECT');
-				if (peerConn.__peerConnId) {
-					cleanUpPeerConnById(peerConn.__peerConnId);
-				}
-			// One or more transports has terminated unexpectedly or in an error
-			break;
-			case 'closed':
-				if (peerConn.__peerConnId) {
-					console.log('Connection closed ' + peerConn.__peerConnId);
-					cleanUpPeerConnById(peerConn.__peerConnId);
-				}
-			break;
-		}
-	}
-
-	peerConn.onaddstream = function (e) {
-
-		console.log('audio stream added ', e.stream);
-		// var video = document.createElement('video');
-		// video.autoplay = 'true';
-		// video.objectSrc = e.stream;
-		// video.style.position = 'absolute';
-		// video.style.visibility = 'hidden';
-		// peerConn.__video = video;
-		// document.body.appendChild(video);
-
-		peerConn.__audioCtx = new AudioContext();
-		peerConn.__source = peerConn.__audioCtx.createMediaStreamSource(e.stream);
-
-		peerConn.__stream = e.stream;
-
-		peerConn.__analyser = peerConn.__audioCtx.createAnalyser();
-		peerConn.__analyser.minDecibels = -140;
-		peerConn.__analyser.maxDecibels = 0;
-
-		peerConn.__analyser.smoothingTimeConstant = 0.8;
-		peerConn.__analyser.fftSize = 32;
-		var freqs = new Uint8Array(peerConn.__analyser.frequencyBinCount);
-		var times = new Uint8Array(peerConn.__analyser.frequencyBinCount);
-
-		peerConn.__source.connect(peerConn.__analyser);
-		peerConn.__analyser.connect(peerConn.__audioCtx.destination);
-
-		setInterval(function () {
-			peerConn.__analyser.getByteFrequencyData(freqs);
-			peerConn.__analyser.getByteTimeDomainData(times);
-			console.log(freqs.join(' '));
-		}, 100);
-
-	}
+	id = id || genId();
 
 	var promise = audioStreamPromise.then(function (audioStream) {
-		peerConn.addStream(audioStream);
+		console.log('Creating new PEER connection');
+
+		var peerConn = new RTCPeerConnection(config);
+
+		peerConn.__peerConnId = id;
+
+		peerConn.__localStream = audioStream;
+
+		// send any ice candidates to the other peer
+		peerConn.onicecandidate = function(event) {
+			// console.log('icecandidate event:', event);
+			if (event.candidate) {
+				sendMessage({
+					type: 'candidate',
+					label: event.candidate.sdpMLineIndex,
+					id: event.candidate.sdpMid,
+					candidate: event.candidate.candidate
+				}, peerConn.__peerConnId);
+			} else {
+				// console.log('End of candidates.');
+			}
+		};
+
+		peerConn.ondatachannel = function (event) {
+			// console.log('ondatachannel:', event.channel);
+			onDataChannelCreated(peerConn, event.channel);
+		};
+
+		peerConn.onconnectionstatechange = function() {
+			switch(peerConn.connectionState) {
+				case 'connected':
+					console.log('connected');
+				break;
+				case 'disconnected':
+				case 'failed':
+					console.log('TODO: RECONNECT');
+					if (peerConn.__peerConnId) {
+						cleanUpPeerConnById(peerConn.__peerConnId);
+					}
+				// One or more transports has terminated unexpectedly or in an error
+				break;
+				case 'closed':
+					if (peerConn.__peerConnId) {
+						console.log('Connection closed ' + peerConn.__peerConnId);
+						cleanUpPeerConnById(peerConn.__peerConnId);
+					}
+				break;
+			}
+		}
+
+		peerConn.onaddstream = function (e) {
+
+			console.log('audio stream added ', e.stream);
+
+			// create a player, we could also get a reference from a existing player in the DOM
+			var player = new Audio();
+			player.autoplay = 'autoplay';
+			// attach the media stream
+			player.srcObject = event.stream;
+			// start playing
+			player.play();
+
+			// peerConn.__source = audioCtx.createMediaStreamSource(e.stream);
+			// peerConn.__source.connect(audioCtx.destination);
+
+			// peerConn.__remoteStream = e.stream;
+
+			// peerConn.__analyser = audioCtx.createAnalyser();
+			// peerConn.__analyser.minDecibels = -140;
+			// peerConn.__analyser.maxDecibels = 0;
+
+			// peerConn.__analyser.smoothingTimeConstant = 0.8;
+			// peerConn.__analyser.fftSize = 32;
+			// var freqs = new Uint8Array(peerConn.__analyser.frequencyBinCount);
+			// var times = new Uint8Array(peerConn.__analyser.frequencyBinCount);
+
+			// peerConn.__source.connect(peerConn.__analyser);
+
+			// setInterval(function () {
+			// 	peerConn.__analyser.getByteFrequencyData(freqs);
+			// 	peerConn.__analyser.getByteTimeDomainData(times);
+			// 	console.log(freqs.join(' '));
+			// }, 100);
+
+		}
+
 		return peerConn;
 	});
 
-	peerConnPromises.set(peerConn.__peerConnId, promise);
+	peerConnPromises.set(id, promise);
 	return promise;
 }
 
