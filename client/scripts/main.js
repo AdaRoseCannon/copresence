@@ -71,7 +71,8 @@ function dial(room) {
 webrtcAvatar.addEventListener('avatar-created', function (e) {
 	var avatar = e.detail;
 	var col = 'color: hsl(' + Math.random() * 360 + ',80%,60%);';
-	avatar.querySelectorAll('.recolor').forEach(function (el) {
+	Array.from(avatar.querySelectorAll('.recolor'))
+	.forEach(function (el) {
 		if (el.matches('.avatar-boom')) {
 			el.setAttribute('material', col + 'side: double; transparent: true; opacity: 0.5;');
 		} else {

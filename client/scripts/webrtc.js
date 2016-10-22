@@ -1,49 +1,177 @@
 'use strict';
-/* global io, _, Map, AFRAME, Promise, Uint8Array */
+/* global io, _, Map, AFRAME, Promise, Float32Array, EventEmitter */
 /* eslint-env browser */
 /* eslint no-var: 0, no-console: 0 */
-
 
 /**
  * CONSTANTS AND UTILITY FUNCTIONS
  */
 
+var VoiceActivityDetector = (function () {
+
+	function CBuffer(len) {
+		var out = [];
+		out.push = function (a) {
+			out.reverse();
+			out.unshift(a);
+			out.splice(len);
+			out.reverse();
+			return out.length;
+		}
+		return out;
+	};
+
+	var FFT_SIZE = 2048;
+	var HISTORY_SIZE = 5;
+	var POWER_FREQUENCY = 1000;
+	var VOICE_POWER_THRESHOLD = -90;
+
+	/**
+	 * Given an audio stream, fires events whenever voice activity starts and stops.
+	 * Current implementation relies on AnalyserNode for efficiency, but works more
+	 * based on frequency power metering than anything else.
+	 *
+	 * Emits the following events, both with a power amount:
+	 *
+	 *    active: When a voice is detected in the stream.
+	 *    inactive: When a voice is no longer detected in the stream.
+	 *    power: The current power level.
+	 *
+	 * TODO(smus): Make a more complex implementation that is based not on a naive
+	 * FFT approach, but the real deal (eg. http://goo.gl/wHlhOs) once AudioWorklets
+	 * are available.
+	 */
+	function VoiceActivityDetector(context) {
+		this.context = context;
+		this.fftData = new Float32Array(FFT_SIZE);
+
+		// Track the current state to emit the right events.
+		this.isActive = false;
+
+		// A circular buffer of voice amplitude histories.
+		this.buffer = new CBuffer(HISTORY_SIZE);
+
+		// When the power level was last reported.
+		this.lastPowerTime = performance.now();
+	}
+
+	VoiceActivityDetector.prototype = new EventEmitter();
+
+	/**
+	 * Sets the source on which to do voice activity detection.
+	 */
+	VoiceActivityDetector.prototype.setSource = function(source) {
+		var analyser = this.context.createAnalyser();
+		analyser.fftSize = FFT_SIZE;
+		source.connect(analyser);
+		this.analyser = analyser;
+
+		this.detect_();
+	};
+
+	VoiceActivityDetector.prototype.detect_ = function() {
+		// Get FFT data into the fftData array.
+		this.analyser.getFloatFrequencyData(this.fftData);
+
+		var power = this.getCurrentHumanSpeechPower_();
+		this.buffer.push(power);
+
+		// Get the running average of the last few samples.
+		var powerHistory = this.getPowerHistory_();
+
+		var isActive = powerHistory > VOICE_POWER_THRESHOLD;
+
+		if (isActive && !this.isActive) {
+			// Just became active.
+			this.emit('active', power);
+		} else if (!isActive && this.isActive) {
+			// Just became inactive.
+			this.emit('inactive', power)
+		}
+
+		// Periodically report the power level too.
+		var now = performance.now();
+		if (isActive && now - this.lastPowerTime > POWER_FREQUENCY) {
+			this.emit('power', power);
+			this.lastPowerTime = now;
+		}
+
+
+		this.isActive = isActive;
+
+		requestAnimationFrame(this.detect_.bind(this));
+	};
+
+	VoiceActivityDetector.prototype.getCurrentHumanSpeechPower_ = function() {
+		// Look at the relevant portions of the frequency spectrum (human speech is
+		// roughly between 300 Hz to 3400 Hz).
+		var start = this.freqToBucketIndex_(300);
+		var end = this.freqToBucketIndex_(3400);
+
+		var sum = 0;
+		for (var i = start; i < end; i++) {
+			sum += this.fftData[i];
+		}
+
+		var power = sum / (end - start);
+
+		return power;
+	};
+
+	VoiceActivityDetector.prototype.getPowerHistory_ = function() {
+		var sum = 0;
+		var count = 0;
+		this.buffer.forEach(function(value) {
+			sum += value;
+			count += 1;
+		});
+		return sum / count;
+	};
+
+	VoiceActivityDetector.prototype.freqToBucketIndex_ = function(frequency) {
+		var nyquist = this.context.sampleRate / 2;
+		return Math.round(frequency / nyquist * this.fftData.length);
+	};
+
+	return VoiceActivityDetector;
+}());
+
+
 var audioCtx = new AudioContext();
 var audioStreamPromise = navigator.mediaDevices.getUserMedia({
-	audio: true,
-	video: false
-})
-.then(function (stream) {
-	var microphone = audioCtx.createMediaStreamSource(stream);
+		audio: true,
+		video: false
+	})
+	.then(function(stream) {
+		var microphone = audioCtx.createMediaStreamSource(stream);
 
-	// Create a filter for voices
-	var filter = audioCtx.createBiquadFilter();
-	filter.type = 'bandpass';
-	filter.frequency.value = 170;
-	filter.Q.value = 0.1;
+		// Create a filter for voices
+		var filter = audioCtx.createBiquadFilter();
+		filter.type = 'bandpass';
+		filter.frequency.value = 170;
+		filter.Q.value = 0.1;
 
-	var peer = audioCtx.createMediaStreamDestination();
+		var peer = audioCtx.createMediaStreamDestination();
 
-	// Connect the microphone input to the stream
-	microphone.connect(filter);
-	filter.connect(peer);
+		// Connect the microphone input to the stream
+		microphone.connect(filter);
+		filter.connect(peer);
 
-	// Make sure the stream is read.
-	var gain = audioCtx.createGain();
-	gain.gain.value = 0.00001;
-	filter.connect(gain);
-	gain.connect(audioCtx.destination);
+		// Make sure the stream is read.
+		var gain = audioCtx.createGain();
+		gain.gain.value = 0.00001;
+		filter.connect(gain);
+		gain.connect(audioCtx.destination);
 
-	return peer.stream;
-});
+		return peer.stream;
+	});
 
 var configuration = {
 	'iceServers': [{
 		'urls': [
 			'stun:stun.l.google.com:19302'
 		]
-	},
-	{
+	}, {
 		'urls': [
 			'stun:stun.services.mozilla.com'
 		]
@@ -60,6 +188,7 @@ function genId() {
 }
 
 var RADTODEG = 180 / Math.PI;
+
 function radToDeg(n) {
 	return n * RADTODEG;
 }
@@ -83,7 +212,7 @@ socket.on('joined', function(room, clientId) {
 	console.log('This peer has joined room', room, 'with client ID', clientId);
 });
 
-socket.on('ready', function (count) {
+socket.on('ready', function(count) {
 	var i;
 
 	// Connect to preexisting clients
@@ -108,70 +237,70 @@ socket.on('ready', function (count) {
 	}
 });
 
-socket.on('new arrival', function () {
+socket.on('new arrival', function() {
 	console.log('Someone has joined the channel so waiting for an offer.');
 });
 
 socket.on('message', function(message, id) {
 	// console.log('Client received message:', message);
 	if (message.type === 'candidate') {
-		(function () {
+		(function() {
 
 			var promise = peerConnPromises.get(id);
 			if (!promise) {
 				console.log('I don\'t have a connection with id', id);
 				return;
 			}
-			promise.then(function (peerConn) {
+			promise.then(function(peerConn) {
 				peerConn.addIceCandidate(new RTCIceCandidate({
 					candidate: message.candidate
 				}));
 			});
-		} ());
+		}());
 	} else if (message.type === 'offer') {
-		(function () {
+		(function() {
 
 			Promise.resolve(peerConnPromises.get(id))
-			.then(function (pc) {
-				return pc || createPeerConnection(configuration, id);
-			})
-			.then(function (peerConn) {
-				console.log('Got offer. Sending answer to peer, id: ', id);
-				peerConn.addStream(peerConn.__localStream);
-				peerConn.setRemoteDescription(new RTCSessionDescription(message), function () {
+				.then(function(pc) {
+					return pc || createPeerConnection(configuration, id);
+				})
+				.then(function(peerConn) {
+					console.log('Got offer. Sending answer to peer, id: ', id);
+					peerConn.addStream(peerConn.__localStream);
+					peerConn.setRemoteDescription(new RTCSessionDescription(message), function() {
 
-					// Creating answer
-					peerConn.createAnswer(onLocalSessionCreated(peerConn), logError);
-				}, logError);
+						// Creating answer
+						peerConn.createAnswer(onLocalSessionCreated(peerConn), logError);
+					}, logError);
 
-			});
+				});
 
-		} ());
+		}());
 	} else if (message.type === 'answer') {
-		(function () {
+		(function() {
 			var promise = peerConnPromises.get(id);
 			if (!promise) {
 				console.log('I don\'t have a connection with id', id);
 				return;
 			}
-			peerConnPromises.set(id, promise.then(function (peerConn) {
+			peerConnPromises.set(id, promise.then(function(peerConn) {
 				console.log('Got answer. ' + id);
-				peerConn.setRemoteDescription(new RTCSessionDescription(message), function () {
+				peerConn.setRemoteDescription(new RTCSessionDescription(message), function() {
 					console.log('Connected ' + id);
 				}, logError);
 				return peerConn;
 			}));
-		} ());
+		}());
 	} else if (message === 'closeconnection') {
-		(function () {
+		(function() {
 			cleanUpPeerConnById(id, true);
 			console.log('disco: ' + id);
-		} ());
+		}());
 	}
 });
 
-window.addEventListener('unload', function () {
-	Array.from(peerConnPromises.keys()).forEach(function (id) {
+window.addEventListener('unload', function() {
+	Array.from(peerConnPromises.keys()).forEach(function(id) {
 		cleanUpPeerConnById(id);
 	});
 
@@ -198,7 +327,7 @@ function createPeerConnection(config, id) {
 
 	id = id || genId();
 
-	var promise = audioStreamPromise.then(function (audioStream) {
+	var promise = audioStreamPromise.then(function(audioStream) {
 		console.log('Creating new PEER connection');
 
 		var peerConn = new RTCPeerConnection(config);
@@ -222,66 +351,81 @@ function createPeerConnection(config, id) {
 			}
 		};
 
-		peerConn.ondatachannel = function (event) {
+		peerConn.ondatachannel = function(event) {
 			// console.log('ondatachannel:', event.channel);
 			onDataChannelCreated(peerConn, event.channel);
 		};
 
 		peerConn.onconnectionstatechange = function() {
-			switch(peerConn.connectionState) {
+			switch (peerConn.connectionState) {
 				case 'connected':
 					console.log('connected');
-				break;
+					break;
 				case 'disconnected':
 				case 'failed':
 					console.log('TODO: RECONNECT');
 					if (peerConn.__peerConnId) {
 						cleanUpPeerConnById(peerConn.__peerConnId);
 					}
-				// One or more transports has terminated unexpectedly or in an error
-				break;
+					// One or more transports has terminated unexpectedly or in an error
+					break;
 				case 'closed':
 					if (peerConn.__peerConnId) {
 						console.log('Connection closed ' + peerConn.__peerConnId);
 						cleanUpPeerConnById(peerConn.__peerConnId);
 					}
-				break;
+					break;
 			}
 		}
 
-		peerConn.onaddstream = function (e) {
+		peerConn.onaddstream = function(e) {
 
 			console.log('audio stream added ', e.stream);
 
 			// create a player, we could also get a reference from a existing player in the DOM
 			var player = new Audio();
-			player.autoplay = 'autoplay';
-			// attach the media stream
-			player.srcObject = event.stream;
-			// start playing
-			player.play();
+			player.src = URL.createObjectURL(e.stream);
+			player.autoplay = true;
+			player.muted = true;
+			window.player = player;
 
-			// peerConn.__source = audioCtx.createMediaStreamSource(e.stream);
-			// peerConn.__source.connect(audioCtx.destination);
+			peerConn.__source = audioCtx.createMediaStreamSource(e.stream);
 
-			// peerConn.__remoteStream = e.stream;
+			peerConn.__vad = new VoiceActivityDetector(audioCtx);
+			peerConn.__vad.setSource(peerConn.__source);
 
-			// peerConn.__analyser = audioCtx.createAnalyser();
-			// peerConn.__analyser.minDecibels = -140;
-			// peerConn.__analyser.maxDecibels = 0;
+			var interval = -1;
+			function flap() {
+				peerConn.__avatar.querySelector('.flap').emit('talk');
+			}
 
-			// peerConn.__analyser.smoothingTimeConstant = 0.8;
-			// peerConn.__analyser.fftSize = 32;
-			// var freqs = new Uint8Array(peerConn.__analyser.frequencyBinCount);
-			// var times = new Uint8Array(peerConn.__analyser.frequencyBinCount);
+			peerConn.__vad.on('active', function(e) {
+				peerConn.currentLevel = e;
+				if (peerConn.__avatar) {
+					if (interval === -1) {
+						flap();
+						interval = setInterval(flap, 160);
+					}
+				}
+			});
 
-			// peerConn.__source.connect(peerConn.__analyser);
+			peerConn.__vad.on('inactive', function() {
+				peerConn.currentLevel = null;
+				clearInterval(interval);
+				interval = -1;
+			});
 
-			// setInterval(function () {
-			// 	peerConn.__analyser.getByteFrequencyData(freqs);
-			// 	peerConn.__analyser.getByteTimeDomainData(times);
-			// 	console.log(freqs.join(' '));
-			// }, 100);
+			peerConn.__vad.on('power', function(e) {
+				peerConn.currentLevel = e;
+				if (peerConn.__avatar) {
+					if (interval === -1) {
+						flap();
+						interval = setInterval(flap, 160);
+					}
+				}
+			});
+
+			peerConn.__source.connect(audioCtx.destination);
 
 		}
 
@@ -300,13 +444,13 @@ function cleanUpPeerConnById(id, nomessage) {
 	}
 	var promise = peerConnPromises.get(id);
 	if (!promise) return;
-	peerConnPromises.set(id, promise.then(function (peerConn) {
+	peerConnPromises.set(id, promise.then(function(peerConn) {
 		peerConnPromises.delete(id);
 		if (peerConn.__avatar) {
 			peerConn.__avatar.emit('remove');
 			var avatar = peerConn.__avatar;
 			delete peerConn.__avatar;
-			setTimeout(function () {
+			setTimeout(function() {
 				avatar.parentNode.removeChild(avatar);
 			}, 1800);
 		}
@@ -318,7 +462,7 @@ function cleanUpPeerConnById(id, nomessage) {
 // Used to send offers and answers
 var onLocalSessionCreated = _.curry(function onLocalSessionCreated(peerConn, desc) {
 	console.log('local session created:', desc);
-	peerConn.setLocalDescription(desc, function () {
+	peerConn.setLocalDescription(desc, function() {
 		console.log('sending local desc:', peerConn.localDescription);
 		sendMessage(peerConn.localDescription, peerConn.__peerConnId);
 	}, logError);
@@ -326,11 +470,11 @@ var onLocalSessionCreated = _.curry(function onLocalSessionCreated(peerConn, des
 
 function getDataChannels() {
 	return Promise.all(Array.from(peerConnPromises.values()))
-	.then(function (arr) {
-		return _.compact(arr.map(function (peerConn) {
-			return peerConn.__dataChannel;
-		}));
-	});
+		.then(function(arr) {
+			return _.compact(arr.map(function(peerConn) {
+				return peerConn.__dataChannel;
+			}));
+		});
 }
 
 var onMessage = _.curry(function onMessage(avatar, event) {
@@ -371,15 +515,15 @@ function onDataChannelCreated(peerConn, channel) {
  * */
 
 AFRAME.registerComponent('webrtc-avatar', {
-	schema:{
+	schema: {
 		room: {
 			type: 'string'
 		}
 	},
-	init: function () {
+	init: function() {
 		this.avatarString = this.el.innerHTML;
 	},
-	update: function () {
+	update: function() {
 
 		// Clean up before updating
 		this.remove();
@@ -394,7 +538,7 @@ AFRAME.registerComponent('webrtc-avatar', {
 		var target = this.el.parentNode;
 		this.el.innerHTML = '';
 
-		this.el.addEventListener('sendstringmessage', function (e) {
+		this.el.addEventListener('sendstringmessage', function(e) {
 			this.dataToSend.push(e.detail);
 		}.bind(this));
 
@@ -417,8 +561,8 @@ AFRAME.registerComponent('webrtc-avatar', {
 				target.object3D.rotation.toArray().slice(0, 3).map(radToDeg).map(numberToPrecision).join(' ') +
 				';' +
 				extraData;
-			getDataChannels().then(function (channels) {
-				channels.forEach(function (dataChannel) {
+			getDataChannels().then(function(channels) {
+				channels.forEach(function(dataChannel) {
 					if (
 						dataChannel.readyState !== 'open'
 					) {
@@ -432,10 +576,10 @@ AFRAME.registerComponent('webrtc-avatar', {
 			});
 		}, 16);
 	},
-	tick: function () {
+	tick: function() {
 		this.sendAvatarData(this.dataToSend.splice(0).join(';'));
 	},
-	remove: function () {
+	remove: function() {
 
 		socket.emit('leaveroom');
 		this.dataToSend = [];
@@ -443,7 +587,7 @@ AFRAME.registerComponent('webrtc-avatar', {
 		if (this.sendAvatarData) this.sendAvatarData.cancel();
 
 		// Close all old connections
-		Array.from(peerConnPromises.keys()).forEach(function (id) {
+		Array.from(peerConnPromises.keys()).forEach(function(id) {
 			cleanUpPeerConnById(id);
 		});
 

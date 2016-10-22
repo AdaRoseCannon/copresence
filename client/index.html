@@ -41,9 +41,13 @@
 				<a-box material="color: aquamarine;" scale="" class="avatar-body recolor" ></a-box>
 				<a-sphere position="0.25 0 -0.5" scale="0.2 0.2 0.2" ></a-sphere>
 				<a-sphere position="-0.25 0 -0.5" scale="0.2 0.2 0.2" ></a-sphere>
-				<a-box material="color: aquamarine;" class="avatar-mouth recolor" position="0 -0.7 0" rotation="-10 0 0" scale="1 0.2 1" ></a-box>
-				<a-box material="color: pink;" position="0 -0.65 0" rotation="-10 0 0" scale="0.8 0.2 0.8" ></a-box>
-				<a-sphere position="0 0 0" scale="0 0 0"  class="avatar-boom recolor" material="color: aquamarine;">
+				<a-entity class="flap" position="0 -0.6 0.5" rotation="-10 0 0">
+					<a-box material="color: aquamarine;" class="avatar-mouth recolor" position="0 0 -0.5" scale="1 0.2 1" >
+						<a-box material="color: pink;" position="0 0.6 0" scale="0.8 0.2 0.8" ></a-box>
+					</a-box>
+					<a-animation attribute="rotation" fill="both" to="-20 0 0" from="-10 0 0" dur="68" count="2" direction="alternate" begin="talk"></a-animation>
+				</a-entity>
+				<a-sphere position="0 0 0" scale="0 0 0" class="avatar-boom recolor" material="color: aquamarine;">
 					<a-animation fill="none" attribute="scale" to="20 20 20" dur="4000"></a-animation>
 					<a-animation attribute="material.opacity" to="0" dur="3000"></a-animation>
 				</a-sphere>
@@ -93,10 +97,11 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.16.1/lodash.min.js"></script>
 	<script src="https://cdn.rawgit.com/mozdevs/mediaDevices-getUserMedia-polyfill/master/mediaDevices-getUserMedia-polyfill.js"></script>
 	<script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+	<script src="https://cdn.rawgit.com/Olical/EventEmitter/v5.1.0/EventEmitter.min.js"></script>
 	<script>
-		adapter.browserShim.shimOnTrack();
-		adapter.browserShim.shimMediaStream();
-		adapter.browserShim.shimPeerConnection();
+		Object.keys(adapter.browserShim).forEach(function (shimFn) {
+			adapter.browserShim[shimFn]();
+		});
 	</script>
 	<script src="/socket.io/socket.io.js"></script>
 	<script src="scripts/webrtc.js"></script>
